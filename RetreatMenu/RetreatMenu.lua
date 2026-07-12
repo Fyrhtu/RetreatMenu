@@ -33,18 +33,31 @@ local STONE_SPELL_SEEDS = {
 -- Location name → continent bucket for submenu grouping
 local EK = "Eastern Kingdoms"
 local KAL = "Kalimdor"
+local OUT = "Outland"
+local NR = "Northrend"
 local OTHER = "Other"
+-- Preferred display order for continent folders
+local CONTINENT_ORDER = { EK, KAL, OUT, NR, OTHER }
 
 local LOCATION_CONTINENT = {
-	-- Eastern Kingdoms
-	["stormwind"] = EK, ["ironforge"] = EK, ["undercity"] = EK, ["darnassus"] = KAL, -- darnassus is kal
+	-- Eastern Kingdoms (towns + zones)
+	["stormwind"] = EK, ["ironforge"] = EK, ["undercity"] = EK,
 	["booty bay"] = EK, ["kharanos"] = EK, ["goldshire"] = EK, ["eastvale"] = EK,
 	["southshore"] = EK, ["south shore"] = EK, ["light's hope"] = EK, ["lights hope"] = EK,
 	["flame crest"] = EK, ["stockade"] = EK, ["menethil"] = EK, ["lakeshire"] = EK,
 	["darkshire"] = EK, ["sentinel hill"] = EK, ["tarren mill"] = EK, ["brill"] = EK,
 	["sepulcher"] = EK, ["the sepulcher"] = EK, ["aerie peak"] = EK, ["refuge pointe"] = EK,
 	["hammerfall"] = EK, ["revantusk"] = EK, ["stoutlager"] = EK, ["chillwind"] = EK,
-	["light's hope chapel"] = EK,
+	["light's hope chapel"] = EK, ["elwynn"] = EK, ["westfall"] = EK, ["redridge"] = EK,
+	["duskwood"] = EK, ["stranglethorn"] = EK, ["swamp of sorrows"] = EK, ["blasted lands"] = EK,
+	["burning steppes"] = EK, ["searing gorge"] = EK, ["badlands"] = EK, ["loch modan"] = EK,
+	["wetlands"] = EK, ["arathi"] = EK, ["hillsbrad"] = EK, ["alterac"] = EK,
+	["silverpine"] = EK, ["tirisfal"] = EK, ["western plaguelands"] = EK, ["eastern plaguelands"] = EK,
+	["hinterlands"] = EK, ["deadwind"] = EK, ["dun morogh"] = EK, ["silvermoon"] = EK,
+	["eversong"] = EK, ["ghostlands"] = EK, ["isle of quel"] = EK, ["karazhan"] = EK,
+	["blackrock"] = EK, ["nethergarde"] = EK, ["stonard"] = EK, ["grom'gol"] = EK,
+	["gromgol"] = EK, ["rebel camp"] = EK, ["thorium point"] = EK, ["kargath"] = EK,
+	["thelsamar"] = EK, ["ambermill"] = EK, ["deep elem"] = EK, ["southshore"] = EK,
 	-- Kalimdor
 	["orgrimmar"] = KAL, ["thunder bluff"] = KAL, ["thunderbluff"] = KAL,
 	["darnassus"] = KAL, ["dolanaar"] = KAL, ["ratchet"] = KAL, ["theramore"] = KAL,
@@ -53,8 +66,29 @@ local LOCATION_CONTINENT = {
 	["feathermoon"] = KAL, ["gadgetzan"] = KAL, ["cenarion hold"] = KAL,
 	["marshall's refuge"] = KAL, ["marshals refuge"] = KAL, ["everlook"] = KAL,
 	["valormok"] = KAL, ["splintertree"] = KAL, ["zoram'gar"] = KAL,
-	-- Outland / misc (bucket Other)
-	["cosmowrench"] = OTHER, ["shattrath"] = OTHER, ["area 52"] = OTHER,
+	["teldrassil"] = KAL, ["darkshore"] = KAL, ["ashenvale"] = KAL, ["azshara"] = KAL,
+	["stonetalon"] = KAL, ["the barrens"] = KAL, ["barrens"] = KAL, ["mulgore"] = KAL,
+	["durotar"] = KAL, ["desolace"] = KAL, ["feralas"] = KAL, ["thousand needles"] = KAL,
+	["tanaris"] = KAL, ["ungoro"] = KAL, ["un'goro"] = KAL, ["silithus"] = KAL,
+	["winterspring"] = KAL, ["felwood"] = KAL, ["moonglade"] = KAL, ["dustwallow"] = KAL,
+	["exodar"] = KAL, ["azuremyst"] = KAL, ["bloodmyst"] = KAL, ["nighthaven"] = KAL,
+	["camp taurajo"] = KAL, ["freewind"] = KAL, ["shadowprey"] = KAL, ["sun rock"] = KAL,
+	-- Outland
+	["shattrath"] = OUT, ["area 52"] = OUT, ["cosmowrench"] = OUT, ["hellfire"] = OUT,
+	["zangarmarsh"] = OUT, ["nagrand"] = OUT, ["terokkar"] = OUT, ["shadowmoon"] = OUT,
+	["blade's edge"] = OUT, ["blades edge"] = OUT, ["netherstorm"] = OUT,
+	["honor hold"] = OUT, ["thrallmar"] = OUT, ["cenarion refuge"] = OUT,
+	["allerian"] = OUT, ["stonebreaker"] = OUT, ["garadar"] = OUT, ["telaar"] = OUT,
+	["sylvanaar"] = OUT, ["thunderlord"] = OUT, ["evergrove"] = OUT, ["orebor"] = OUT,
+	["telredor"] = OUT, ["zabrajin"] = OUT, ["altar of sha'tar"] = OUT, ["sanctum of the stars"] = OUT,
+	["wildhammer stronghold"] = OUT, ["shadowmoon village"] = OUT,
+	-- Northrend
+	["dalaran"] = NR, ["borean"] = NR, ["howling fjord"] = NR, ["dragonblight"] = NR,
+	["grizzly hills"] = NR, ["zul'drak"] = NR, ["sholazar"] = NR, ["storm peaks"] = NR,
+	["icecrown"] = NR, ["wintergrasp"] = NR, ["crystalsong"] = NR,
+	["valiance keep"] = NR, ["warsong hold"] = NR, ["valgarde"] = NR, ["vengeance landing"] = NR,
+	["moaki"] = NR, ["agmar"] = NR, ["wyrmrest"] = NR, ["amberpine"] = NR,
+	["conquest hold"] = NR, ["k3"] = NR, ["dun niffelem"] = NR, ["argent tournament"] = NR,
 }
 
 local tt = CreateFrame("GameTooltip", "RetreatMenuScanTip", nil, "GameTooltipTemplate")
@@ -269,21 +303,51 @@ end
 local function ContinentForLocation(loc)
 	if not loc then return OTHER end
 	local l = string.lower(loc)
+	-- Prefer longer key matches (e.g. "light's hope chapel" over partials)
+	local bestKey, bestCont, bestLen = nil, nil, 0
 	for key, cont in pairs(LOCATION_CONTINENT) do
-		if string.find(l, key, 1, true) then
-			return cont
+		if string.find(l, key, 1, true) and #key > bestLen then
+			bestKey, bestCont, bestLen = key, cont, #key
 		end
 	end
-	-- Heuristic: many "X in Zone" patterns
+	if bestCont then return bestCont end
 	if string.find(l, "kalimdor", 1, true) then return KAL end
-	if string.find(l, "eastern", 1, true) then return EK end
+	if string.find(l, "eastern kingdom", 1, true) or string.find(l, "eastern kingdoms", 1, true) then return EK end
+	if string.find(l, "outland", 1, true) then return OUT end
+	if string.find(l, "northrend", 1, true) then return NR end
 	return OTHER
 end
 
 local function LocationFromSpellName(name)
 	if not name then return nil end
+	-- "Rune of Retreat: Goldshire" / "Stone of Retreat: Orgrimmar"
 	local loc = name:match(":%s*(.+)$")
 	return loc
+end
+
+local function ShortDestinationName(entry)
+	if not entry then return "?" end
+	if entry.location and entry.location ~= "" then
+		return entry.location
+	end
+	local fromName = LocationFromSpellName(entry.name)
+	if fromName then return fromName end
+	return entry.name or "?"
+end
+
+local function GroupByContinent(list)
+	local byCont = {}
+	for _, e in ipairs(list) do
+		local c = e.continent or OTHER
+		if not byCont[c] then byCont[c] = {} end
+		byCont[c][#byCont[c] + 1] = e
+	end
+	for _, group in pairs(byCont) do
+		table.sort(group, function(a, b)
+			return ShortDestinationName(a) < ShortDestinationName(b)
+		end)
+	end
+	return byCont
 end
 
 --------------------------------------------------------------------------
@@ -414,6 +478,9 @@ local unlocked = false
 local AUTO_CLOSE_SEC = 5
 local menuAwayTime = 0
 local HideMenu -- forward decl (auto-close OnUpdate calls it)
+-- Which continent folders are open: expandedFolders["runes"] = "Kalimdor", etc.
+local expandedFolders = { stones = nil, runes = nil }
+local BuildMenu -- forward decl (folder clicks rebuild)
 
 local function IsMouseOverMenuUI()
 	if menuFrame and menuFrame:IsShown() and menuFrame:IsMouseOver() then
@@ -465,6 +532,10 @@ local function ClearMenuButtons()
 		b:SetAttribute("item", nil)
 		b:SetScript("OnClick", nil)
 		b:SetScript("PreClick", nil)
+		b:SetScript("PostClick", nil)
+		b:SetScript("OnEnter", nil)
+		b:SetScript("OnLeave", nil)
+		b:EnableMouse(true)
 	end
 end
 
@@ -519,16 +590,19 @@ local function AddSubtitle(y, text, idx)
 	return y - 16, idx + 1
 end
 
-local function AddSpellLine(y, entry, idx, tooltipExtra)
+local function AddSpellLine(y, entry, idx, tooltipExtra, opts)
+	opts = opts or {}
 	local b = AcquireButton(idx)
-	b:SetPoint("TOPLEFT", 4, y)
+	local leftPad = opts.indent and 14 or 4
+	b:SetPoint("TOPLEFT", leftPad, y)
 	b:SetPoint("TOPRIGHT", -4, y)
 	b:SetHeight(20)
 	b.icon:Show()
 	b.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_Rune_01")
 	b.text:SetPoint("LEFT", 22, 0)
 	local cd = entry.cd and entry.cd() or ""
-	b.text:SetText((entry.name or "?") .. cd)
+	local label = opts.shortName and ShortDestinationName(entry) or (entry.name or "?")
+	b.text:SetText(label .. cd)
 	b:EnableMouse(true)
 	if entry.id then
 		b:SetAttribute("type", "spell")
@@ -537,6 +611,7 @@ local function AddSpellLine(y, entry, idx, tooltipExtra)
 		b:SetAttribute("type", "spell")
 		b:SetAttribute("spell", entry.name)
 	end
+	b:SetScript("OnClick", nil)
 	b:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 		if entry.id then
@@ -552,12 +627,96 @@ local function AddSpellLine(y, entry, idx, tooltipExtra)
 		if entry.location then
 			GameTooltip:AddLine("Destination: " .. entry.location, 1, 1, 0.6, true)
 		end
+		if entry.name and opts.shortName then
+			GameTooltip:AddLine(entry.name, 0.7, 0.7, 0.7, true)
+		end
 		GameTooltip:Show()
 	end)
 	b:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	b:SetScript("PostClick", function() HideMenu() end)
 	b:Show()
 	return y - 20, idx + 1
+end
+
+--- Clickable continent/area folder row (accordion open/close).
+local function AddFolderLine(y, label, count, idx, folderKey, contName)
+	local open = expandedFolders[folderKey] == contName
+	local b = AcquireButton(idx)
+	b:SetPoint("TOPLEFT", 4, y)
+	b:SetPoint("TOPRIGHT", -4, y)
+	b:SetHeight(20)
+	b.icon:Show()
+	b.icon:SetTexture(open
+		and "Interface\\Buttons\\UI-MinusButton-Up"
+		or "Interface\\Buttons\\UI-PlusButton-Up")
+	b.text:SetPoint("LEFT", 22, 0)
+	local arrow = open and "|cffc0a0ff▼|r " or "|cffaaaaaa►|r "
+	b.text:SetText(arrow .. "|cffffffff" .. label .. "|r |cff888888(" .. tostring(count) .. ")|r")
+	b:EnableMouse(true)
+	b:SetAttribute("type", nil)
+	b:SetAttribute("spell", nil)
+	b:SetAttribute("item", nil)
+	b:SetScript("PostClick", nil)
+	b:SetScript("PreClick", nil)
+	b:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:SetText(label)
+		GameTooltip:AddLine(open and "Click to collapse" or "Click to open destinations", 0.8, 0.8, 0.8, true)
+		GameTooltip:AddLine(count .. " known", 0.6, 0.8, 1, true)
+		GameTooltip:Show()
+	end)
+	b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	b:SetScript("OnClick", function()
+		if InCombatLockdown() then
+			Print("Can't change menu in combat.")
+			return
+		end
+		if expandedFolders[folderKey] == contName then
+			expandedFolders[folderKey] = nil
+		else
+			expandedFolders[folderKey] = contName
+		end
+		BuildMenu()
+	end)
+	b:Show()
+	return y - 20, idx + 1
+end
+
+--- Title + continent folders; only the open continent lists spells.
+local function AddContinentFolders(y, idx, title, list, folderKey)
+	if not list or #list == 0 then
+		return y, idx
+	end
+	y, idx = AddTitle(y, title, idx)
+	local byCont = GroupByContinent(list)
+	-- Drop empty continents; append any unexpected keys after CONTINENT_ORDER
+	local order = {}
+	local seen = {}
+	for _, cont in ipairs(CONTINENT_ORDER) do
+		if byCont[cont] and #byCont[cont] > 0 then
+			order[#order + 1] = cont
+			seen[cont] = true
+		end
+	end
+	for cont, group in pairs(byCont) do
+		if not seen[cont] and #group > 0 then
+			order[#order + 1] = cont
+		end
+	end
+	-- Auto-open the only continent so one-click use still feels fast
+	if #order == 1 and not expandedFolders[folderKey] then
+		expandedFolders[folderKey] = order[1]
+	end
+	for _, cont in ipairs(order) do
+		local group = byCont[cont]
+		y, idx = AddFolderLine(y, cont, #group, idx, folderKey, cont)
+		if expandedFolders[folderKey] == cont then
+			for _, e in ipairs(group) do
+				y, idx = AddSpellLine(y, e, idx, nil, { indent = true, shortName = true })
+			end
+		end
+	end
+	return y, idx
 end
 
 local function AddItemLine(y, itemID, name, icon, idx, opts)
@@ -621,7 +780,7 @@ local function AddItemLine(y, itemID, name, icon, idx, opts)
 	return y - 20, idx + 1
 end
 
-local function BuildMenu()
+BuildMenu = function()
 	if InCombatLockdown() then
 		Print("Can't refresh menu in combat.")
 		if menuFrame and menuFrame:IsShown() then return end
@@ -644,7 +803,7 @@ local function BuildMenu()
 
 	local stones, runes, hearthSpells = ScanSpellbook()
 	local y, idx = -6, 1
-	local width = 280
+	local width = 300
 
 	-- 1) Travel Permit (level < 9)
 	local level = UnitLevel("player") or 1
@@ -731,47 +890,9 @@ local function BuildMenu()
 		y, idx = AddItemLine(y, scrollID, scrollName, nil, idx)
 	end
 
-	-- 5) Stones by continent
-	if #stones > 0 then
-		y, idx = AddTitle(y, "Stones of Retreat", idx)
-		local byCont = { [EK] = {}, [KAL] = {}, [OTHER] = {} }
-		for _, e in ipairs(stones) do
-			local c = e.continent or OTHER
-			if not byCont[c] then byCont[c] = {} end
-			table.insert(byCont[c], e)
-		end
-		for _, cont in ipairs({ EK, KAL, OTHER }) do
-			local list = byCont[cont]
-			if list and #list > 0 then
-				table.sort(list, function(a, b) return (a.name or "") < (b.name or "") end)
-				y, idx = AddSubtitle(y, cont, idx)
-				for _, e in ipairs(list) do
-					y, idx = AddSpellLine(y, e, idx)
-				end
-			end
-		end
-	end
-
-	-- 6) Runes by continent (EK / Kalimdor focus)
-	if #runes > 0 then
-		y, idx = AddTitle(y, "Runes of Retreat", idx)
-		local byCont = { [EK] = {}, [KAL] = {}, [OTHER] = {} }
-		for _, e in ipairs(runes) do
-			local c = e.continent or OTHER
-			if not byCont[c] then byCont[c] = {} end
-			table.insert(byCont[c], e)
-		end
-		for _, cont in ipairs({ EK, KAL, OTHER }) do
-			local list = byCont[cont]
-			if list and #list > 0 then
-				table.sort(list, function(a, b) return (a.name or "") < (b.name or "") end)
-				y, idx = AddSubtitle(y, cont, idx)
-				for _, e in ipairs(list) do
-					y, idx = AddSpellLine(y, e, idx)
-				end
-			end
-		end
-	end
+	-- 5–6) Stones / Runes: continent folders (click to open destinations)
+	y, idx = AddContinentFolders(y, idx, "Stones of Retreat", stones, "stones")
+	y, idx = AddContinentFolders(y, idx, "Runes of Retreat", runes, "runes")
 
 	-- 7) Flight Master's Whistle
 	y, idx = AddTitle(y, "Travel", idx)

@@ -44,7 +44,7 @@ Slash commands:
 
 - Spellbook scan for stones / runes / scrolls of retreat
 - Bound-location labels (hearth and replacement spells)
-- Continent-style grouping where location is known
+- **Continent submenus** for stones and runes (click a continent to open destinations)
 - Cooldown display on list rows
 - Vanity collection: request deliver when item is known but not in bags
 - Per-character saved position and lock state

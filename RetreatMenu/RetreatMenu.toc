@@ -2,7 +2,7 @@
 ## Title: RetreatMenu
 ## Notes: Lightweight draggable button listing Stones/Runes/Scrolls of Retreat, hearth replacements, and cooldowns. Extremely low memory.
 ## Author: Fyrhtu
-## Version: 1.0.0
+## Version: 1.1.0
 ## SavedVariablesPerCharacter: RetreatMenuDB
 ## DefaultState: enabled
 
