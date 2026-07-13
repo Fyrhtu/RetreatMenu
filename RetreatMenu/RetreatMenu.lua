@@ -473,7 +473,9 @@ end
 --------------------------------------------------------------------------
 -- UI
 --------------------------------------------------------------------------
-local mainBtn, menuFrame, menuButtons = nil, nil, {}
+local mainBtn, menuFrame = nil, nil
+local uiButtonPool, secButtonPool = {}, {}
+local activeMenuButtons = {}
 local unlocked = false
 local AUTO_CLOSE_SEC = 5
 local menuAwayTime = 0
@@ -481,6 +483,7 @@ local HideMenu -- forward decl (auto-close OnUpdate calls it)
 -- Which continent folders are open: expandedFolders["runes"] = "Kalimdor", etc.
 local expandedFolders = { stones = nil, runes = nil }
 local BuildMenu -- forward decl (folder clicks rebuild)
+local uiPoolN, secPoolN = 0, 0
 
 local function IsMouseOverMenuUI()
 	if menuFrame and menuFrame:IsShown() and menuFrame:IsMouseOver() then
@@ -524,75 +527,149 @@ HideMenu = function()
 	if menuFrame then menuFrame:Hide() end
 end
 
+-- Secure cast rows MUST keep the template's OnClick forever.
+-- Any addon SetScript("OnClick", ...) — even SecureActionButton_OnClick —
+-- taints the handler and produces:
+--   "RetreatMenu has been blocked from an action only available to the Blizzard UI"
+-- Use PreClick / PostClick / OnEnter for addon logic; never touch OnClick on
+-- SecureActionButtonTemplate frames. Folders/titles use a separate non-secure pool.
+
+local function SetupButtonChrome(b, isSecure)
+	b:SetHeight(20)
+	-- LeftButtonUp is enough for cast/use; avoids odd multi-button secure paths.
+	b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	if not b.text then
+		local fs = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		fs:SetPoint("LEFT", 22, 0)
+		fs:SetPoint("RIGHT", -4, 0)
+		fs:SetJustifyH("LEFT")
+		b.text = fs
+	end
+	if not b.icon then
+		local tex = b:CreateTexture(nil, "ARTWORK")
+		tex:SetSize(16, 16)
+		tex:SetPoint("LEFT", 2, 0)
+		b.icon = tex
+	end
+	if not b.hi then
+		local hi = b:CreateTexture(nil, "HIGHLIGHT")
+		hi:SetAllPoints()
+		hi:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+		hi:SetBlendMode("ADD")
+		b.hi = hi
+	end
+	-- Do not touch OnClick when isSecure.
+	if not isSecure then
+		-- UI buttons start with no click handler until assigned.
+	end
+end
+
+local function ClearSecureAttributes(b)
+	if not b or not b.isSecure then return end
+	-- Attributes only — never SetScript("OnClick", ...).
+	b:SetAttribute("type", nil)
+	b:SetAttribute("type1", nil)
+	b:SetAttribute("*type1", nil)
+	b:SetAttribute("spell", nil)
+	b:SetAttribute("spell1", nil)
+	b:SetAttribute("item", nil)
+	b:SetAttribute("item1", nil)
+	b:SetAttribute("macrotext", nil)
+	b:SetAttribute("macrotext1", nil)
+end
+
 local function ClearMenuButtons()
-	for _, b in ipairs(menuButtons) do
+	for _, b in ipairs(activeMenuButtons) do
 		b:Hide()
-		b:SetAttribute("type", nil)
-		b:SetAttribute("spell", nil)
-		b:SetAttribute("item", nil)
-		b:SetScript("OnClick", nil)
+		b:ClearAllPoints()
 		b:SetScript("PreClick", nil)
 		b:SetScript("PostClick", nil)
 		b:SetScript("OnEnter", nil)
 		b:SetScript("OnLeave", nil)
-		b:EnableMouse(true)
+		if b.isSecure then
+			ClearSecureAttributes(b)
+			-- NEVER SetScript OnClick on secure buttons.
+			secButtonPool[#secButtonPool + 1] = b
+		else
+			b:SetScript("OnClick", nil)
+			b:EnableMouse(true)
+			uiButtonPool[#uiButtonPool + 1] = b
+		end
 	end
+	wipe(activeMenuButtons)
 end
 
-local function AcquireButton(i)
-	if menuButtons[i] then return menuButtons[i] end
-	local b = CreateFrame("Button", "RetreatMenuBtn" .. i, menuFrame, "SecureActionButtonTemplate")
-	b:SetHeight(20)
-	-- 3.3.5 SecureActionButtons have no SetTextFontObject; use our own FontString.
-	b:RegisterForClicks("AnyUp")
-	local fs = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	fs:SetPoint("LEFT", 22, 0)
-	fs:SetPoint("RIGHT", -4, 0)
-	fs:SetJustifyH("LEFT")
-	b.text = fs
-	local tex = b:CreateTexture(nil, "ARTWORK")
-	tex:SetSize(16, 16)
-	tex:SetPoint("LEFT", 2, 0)
-	b.icon = tex
-	local hi = b:CreateTexture(nil, "HIGHLIGHT")
-	hi:SetAllPoints()
-	hi:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
-	hi:SetBlendMode("ADD")
-	menuButtons[i] = b
+--- Non-secure row (titles, subtitles, continent folders).
+local function AcquireUIButton(_idx)
+	local b = tremove(uiButtonPool)
+	if not b then
+		uiPoolN = uiPoolN + 1
+		b = CreateFrame("Button", "RetreatMenuUIBtn" .. uiPoolN, menuFrame)
+		b.isSecure = false
+		SetupButtonChrome(b, false)
+	end
+	activeMenuButtons[#activeMenuButtons + 1] = b
+	return b
+end
+
+--- Secure cast/use row (spells + bag items).
+--- Template OnClick is left untouched for the life of the frame.
+local function AcquireSecureButton(_idx)
+	local b = tremove(secButtonPool)
+	if not b then
+		secPoolN = secPoolN + 1
+		b = CreateFrame("Button", "RetreatMenuSecBtn" .. secPoolN, menuFrame, "SecureActionButtonTemplate")
+		b.isSecure = true
+		SetupButtonChrome(b, true)
+		-- Intentionally do NOT SetScript("OnClick", ...).
+	else
+		ClearSecureAttributes(b)
+	end
+	activeMenuButtons[#activeMenuButtons + 1] = b
 	return b
 end
 
 local function AddTitle(y, text, idx)
-	local b = AcquireButton(idx)
+	local b = AcquireUIButton(idx)
 	b:SetPoint("TOPLEFT", 4, y)
 	b:SetPoint("TOPRIGHT", -4, y)
 	b:SetHeight(18)
 	b.icon:Hide()
 	b.text:SetPoint("LEFT", 4, 0)
 	b.text:SetText("|cffffff00" .. text)
-	b:SetAttribute("type", nil)
 	b:EnableMouse(false)
+	b:SetScript("OnClick", nil)
 	b:Show()
 	return y - 18, idx + 1
 end
 
 local function AddSubtitle(y, text, idx)
-	local b = AcquireButton(idx)
+	local b = AcquireUIButton(idx)
 	b:SetPoint("TOPLEFT", 4, y)
 	b:SetPoint("TOPRIGHT", -4, y)
 	b:SetHeight(16)
 	b.icon:Hide()
 	b.text:SetPoint("LEFT", 8, 0)
 	b.text:SetText("|cffaaaaaa" .. text)
-	b:SetAttribute("type", nil)
 	b:EnableMouse(false)
+	b:SetScript("OnClick", nil)
 	b:Show()
 	return y - 16, idx + 1
 end
 
+local function SpellAttributeName(entry)
+	if not entry then return nil end
+	if entry.id then
+		local n = GetSpellInfo(entry.id)
+		if n and n ~= "" then return n end
+	end
+	if entry.name and entry.name ~= "" then return entry.name end
+	return nil
+end
+
 local function AddSpellLine(y, entry, idx, tooltipExtra, opts)
 	opts = opts or {}
-	local b = AcquireButton(idx)
+	local b = AcquireSecureButton(idx)
 	local leftPad = opts.indent and 14 or 4
 	b:SetPoint("TOPLEFT", leftPad, y)
 	b:SetPoint("TOPRIGHT", -4, y)
@@ -604,14 +681,15 @@ local function AddSpellLine(y, entry, idx, tooltipExtra, opts)
 	local label = opts.shortName and ShortDestinationName(entry) or (entry.name or "?")
 	b.text:SetText(label .. cd)
 	b:EnableMouse(true)
-	if entry.id then
+
+	-- 3.3.5 SecureActionButton: spell attribute must be the *name*, not the ID.
+	local spellName = SpellAttributeName(entry)
+	ClearSecureAttributes(b)
+	if spellName then
 		b:SetAttribute("type", "spell")
-		b:SetAttribute("spell", entry.id)
-	else
-		b:SetAttribute("type", "spell")
-		b:SetAttribute("spell", entry.name)
+		b:SetAttribute("spell", spellName)
 	end
-	b:SetScript("OnClick", nil)
+	b:SetScript("PreClick", nil)
 	b:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 		if entry.id then
@@ -633,6 +711,7 @@ local function AddSpellLine(y, entry, idx, tooltipExtra, opts)
 		GameTooltip:Show()
 	end)
 	b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	-- PostClick is insecure and runs after the secure cast — safe for HideMenu.
 	b:SetScript("PostClick", function() HideMenu() end)
 	b:Show()
 	return y - 20, idx + 1
@@ -641,7 +720,7 @@ end
 --- Clickable continent/area folder row (accordion open/close).
 local function AddFolderLine(y, label, count, idx, folderKey, contName)
 	local open = expandedFolders[folderKey] == contName
-	local b = AcquireButton(idx)
+	local b = AcquireUIButton(idx)
 	b:SetPoint("TOPLEFT", 4, y)
 	b:SetPoint("TOPRIGHT", -4, y)
 	b:SetHeight(20)
@@ -653,11 +732,8 @@ local function AddFolderLine(y, label, count, idx, folderKey, contName)
 	local arrow = open and "|cffc0a0ff▼|r " or "|cffaaaaaa►|r "
 	b.text:SetText(arrow .. "|cffffffff" .. label .. "|r |cff888888(" .. tostring(count) .. ")|r")
 	b:EnableMouse(true)
-	b:SetAttribute("type", nil)
-	b:SetAttribute("spell", nil)
-	b:SetAttribute("item", nil)
-	b:SetScript("PostClick", nil)
 	b:SetScript("PreClick", nil)
+	b:SetScript("PostClick", nil)
 	b:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 		GameTooltip:SetText(label)
@@ -721,16 +797,9 @@ end
 
 local function AddItemLine(y, itemID, name, icon, idx, opts)
 	opts = opts or {}
-	local b = AcquireButton(idx)
-	b:SetPoint("TOPLEFT", 4, y)
-	b:SetPoint("TOPRIGHT", -4, y)
-	b:SetHeight(20)
 	local n, _, _, _, _, _, _, _, _, ic = GetItemInfo(itemID)
 	name = name or n or ("item:" .. tostring(itemID))
 	icon = icon or ic or "Interface\\Icons\\INV_Misc_QuestionMark"
-	b.icon:Show()
-	b.icon:SetTexture(icon)
-	b.text:SetPoint("LEFT", 22, 0)
 	local inBags = FindItemInBags(itemID) ~= nil
 	local vanity = VanityOwned(itemID)
 	local suffix = ItemCooldownText(itemID)
@@ -739,17 +808,20 @@ local function AddItemLine(y, itemID, name, icon, idx, opts)
 	elseif not inBags and not vanity then
 		suffix = suffix .. " |cff888888(missing)|r"
 	end
-	b.text:SetText(name .. suffix)
-	b:EnableMouse(true)
 
+	-- Bag use needs a secure button. Vanity deliver / missing must stay on a
+	-- non-secure UI button so we never SetScript OnClick on a secure frame.
+	local b
 	if inBags then
+		b = AcquireSecureButton(idx)
+		ClearSecureAttributes(b)
 		b:SetAttribute("type", "item")
 		b:SetAttribute("item", name)
 		b:SetScript("PreClick", nil)
+		b:SetScript("PostClick", function() HideMenu() end)
 	else
-		b:SetAttribute("type", nil)
-		b:SetAttribute("item", nil)
-		b:SetScript("PreClick", function()
+		b = AcquireUIButton(idx)
+		b:SetScript("OnClick", function()
 			if vanity then
 				if VanityDeliver(itemID) then
 					Print("Delivering " .. name .. " from Vanity Collection…")
@@ -760,7 +832,17 @@ local function AddItemLine(y, itemID, name, icon, idx, opts)
 				Print(name .. " not in bags or vanity.")
 			end
 		end)
+		b:SetScript("PostClick", nil)
 	end
+
+	b:SetPoint("TOPLEFT", 4, y)
+	b:SetPoint("TOPRIGHT", -4, y)
+	b:SetHeight(20)
+	b.icon:Show()
+	b.icon:SetTexture(icon)
+	b.text:SetPoint("LEFT", 22, 0)
+	b.text:SetText(name .. suffix)
+	b:EnableMouse(true)
 	b:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 		GameTooltip:SetHyperlink("item:" .. itemID)
@@ -773,9 +855,6 @@ local function AddItemLine(y, itemID, name, icon, idx, opts)
 		GameTooltip:Show()
 	end)
 	b:SetScript("OnLeave", function() GameTooltip:Hide() end)
-	b:SetScript("PostClick", function()
-		if inBags then HideMenu() end
-	end)
 	b:Show()
 	return y - 20, idx + 1
 end

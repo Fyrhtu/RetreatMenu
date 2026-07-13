@@ -45,8 +45,10 @@ Slash commands:
 - Spellbook scan for stones / runes / scrolls of retreat
 - Bound-location labels (hearth and replacement spells)
 - **Continent submenus** for stones and runes (click a continent to open destinations)
+- Secure cast buttons for spells/items (3.3.5-safe; no taint on use)
 - Cooldown display on list rows
 - Vanity collection: request deliver when item is known but not in bags
+- Purple unlock border; menu auto-closes after 5s idle
 - Per-character saved position and lock state
 
 ## Requirements
